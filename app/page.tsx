@@ -1,80 +1,141 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { SUBJECTS, BADGES, QUESTIONS, DEFAULT_STATS, getLevel, getXPProgress, XP_PER_LEVEL, type UserStats, type Subject } from '../lib/data'
+import { supabase } from '../lib/supabase'
+import { SUBJECTS, BADGES, QUESTIONS, getLevel, getXPProgress, XP_PER_LEVEL, type UserStats, type Subject } from '../lib/data'
 import Quiz from './components/Quiz'
 import Leaderboard from './components/Leaderboard'
+import Auth from './components/Auth'
+import type { User } from '@supabase/supabase-js'
 
 type View = 'home' | 'quiz' | 'leaderboard' | 'profile'
 
 export default function Home() {
-  const [stats, setStats] = useState<UserStats>(DEFAULT_STATS)
+  const [user, setUser] = useState<User | null>(null)
+  const [stats, setStats] = useState<UserStats | null>(null)
   const [view, setView] = useState<View>('home')
   const [activeSubject, setActiveSubject] = useState<Subject>('english')
   const [xpPopup, setXpPopup] = useState<string | null>(null)
   const [newBadge, setNewBadge] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    const saved = localStorage.getItem('skolenu-stats')
-    if (saved) {
-      const parsed = JSON.parse(saved)
-      // Update streak
-      const today = new Date().toDateString()
-      const yesterday = new Date(Date.now() - 86400000).toDateString()
-      if (parsed.lastPlayedDate === yesterday) {
-        parsed.streak = (parsed.streak || 0) + 1
-      } else if (parsed.lastPlayedDate !== today && parsed.lastPlayedDate !== '') {
-        parsed.streak = 0
-      }
-      setStats(parsed)
-    }
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null)
+      if (session?.user) loadProfile(session.user.id)
+      else setLoading(false)
+    })
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null)
+      if (session?.user) loadProfile(session.user.id)
+      else { setStats(null); setLoading(false) }
+    })
+
+    return () => subscription.unsubscribe()
   }, [])
 
-  function saveStats(newStats: UserStats) {
-    const today = new Date().toDateString()
-    const updated = { ...newStats, lastPlayedDate: today }
-    localStorage.setItem('skolenu-stats', JSON.stringify(updated))
-    setStats(updated)
+  async function loadProfile(userId: string) {
+    setLoading(true)
+    const { data } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', userId)
+      .single()
+
+    if (data) {
+      const today = new Date().toDateString()
+      const yesterday = new Date(Date.now() - 86400000).toDateString()
+      let streak = data.streak
+
+      if (data.last_played_date === yesterday) {
+        streak = streak + 1
+        await supabase.from('profiles').update({ streak }).eq('id', userId)
+      } else if (data.last_played_date !== today && data.last_played_date !== '') {
+        streak = 0
+        await supabase.from('profiles').update({ streak: 0 }).eq('id', userId)
+      }
+
+      setStats({
+        xp: data.xp,
+        level: getLevel(data.xp),
+        streak,
+        correctAnswers: data.correct_answers,
+        totalAnswers: data.total_answers,
+        badgesEarned: data.badges_earned || [],
+        subjectProgress: data.subject_progress || { english: 0, latvian: 0, math: 0, social: 0 },
+        lastPlayedDate: data.last_played_date,
+      })
+    }
+    setLoading(false)
   }
 
-  function handleAnswer(correct: boolean, xp: number, subject: Subject) {
-    setStats(prev => {
-      const newXP = prev.xp + (correct ? xp : 0)
-      const newCorrect = prev.correctAnswers + (correct ? 1 : 0)
-      const newTotal = prev.totalAnswers + 1
-      const newLevel = getLevel(newXP)
-      const newSubjectProgress = {
-        ...prev.subjectProgress,
-        [subject]: prev.subjectProgress[subject] + (correct ? 1 : 0)
-      }
+  async function handleAnswer(correct: boolean, xp: number, subject: Subject) {
+    if (!user || !stats) return
 
-      const newStats: UserStats = {
-        ...prev,
-        xp: newXP,
-        level: newLevel,
-        correctAnswers: newCorrect,
-        totalAnswers: newTotal,
-        subjectProgress: newSubjectProgress,
-      }
+    const newXP = stats.xp + (correct ? xp : 0)
+    const newCorrect = stats.correctAnswers + (correct ? 1 : 0)
+    const newTotal = stats.totalAnswers + 1
+    const newLevel = getLevel(newXP)
+    const newSubjectProgress = {
+      ...stats.subjectProgress,
+      [subject]: stats.subjectProgress[subject] + (correct ? 1 : 0)
+    }
+    const today = new Date().toDateString()
 
-      // Check badges
-      const newBadges = BADGES.filter(b =>
-        !prev.badgesEarned.includes(b.id) && b.condition(newStats)
-      )
-      if (newBadges.length > 0) {
-        newStats.badgesEarned = [...prev.badgesEarned, ...newBadges.map(b => b.id)]
-        setNewBadge(`${newBadges[0].icon} ${newBadges[0].name}`)
-        setTimeout(() => setNewBadge(null), 3000)
-      }
+    const newStats: UserStats = {
+      ...stats,
+      xp: newXP,
+      level: newLevel,
+      correctAnswers: newCorrect,
+      totalAnswers: newTotal,
+      subjectProgress: newSubjectProgress,
+      lastPlayedDate: today,
+    }
 
-      if (correct) {
-        setXpPopup(`+${xp} XP`)
-        setTimeout(() => setXpPopup(null), 2000)
-      }
+    const newBadges = BADGES.filter(b =>
+      !stats.badgesEarned.includes(b.id) && b.condition(newStats)
+    )
+    if (newBadges.length > 0) {
+      newStats.badgesEarned = [...stats.badgesEarned, ...newBadges.map(b => b.id)]
+      setNewBadge(`${newBadges[0].icon} ${newBadges[0].name}`)
+      setTimeout(() => setNewBadge(null), 3000)
+    }
 
-      saveStats(newStats)
-      return newStats
-    })
+    if (correct) {
+      setXpPopup(`+${xp} XP`)
+      setTimeout(() => setXpPopup(null), 2000)
+    }
+
+    setStats(newStats)
+
+    await supabase.from('profiles').update({
+      xp: newXP,
+      level: newLevel,
+      correct_answers: newCorrect,
+      total_answers: newTotal,
+      subject_progress: newSubjectProgress,
+      badges_earned: newStats.badgesEarned,
+      last_played_date: today,
+    }).eq('id', user.id)
+  }
+
+  async function handleLogout() {
+    await supabase.auth.signOut()
+    setView('home')
+  }
+
+  if (loading) {
+    return (
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', flexDirection: 'column', gap: 16 }}>
+        <div style={{ fontSize: 48 }}>⚔️</div>
+        <p style={{ color: 'var(--text-muted)' }}>Ielādē...</p>
+      </div>
+    )
+  }
+
+  if (!user || !stats) {
+    return <Auth onSuccess={() => loadProfile(user?.id ?? '')} />
   }
 
   const level = getLevel(stats.xp)
@@ -83,10 +144,7 @@ export default function Home() {
 
   return (
     <div style={{ maxWidth: 480, margin: '0 auto', padding: '0 16px 100px' }}>
-      {/* XP Popup */}
       {xpPopup && <div className="xp-popup">{xpPopup}</div>}
-
-      {/* Badge Popup */}
       {newBadge && (
         <div className="xp-popup" style={{ background: '#f59e0b', top: 70 }}>
           🏆 Jauna nozīmīte: {newBadge}
@@ -105,22 +163,19 @@ export default function Home() {
         </div>
       </div>
 
-      {/* XP Bar */}
       <div className="progress-bar" style={{ marginBottom: 24 }}>
         <div className="progress-fill" style={{ width: `${xpProgress}%` }} />
       </div>
 
-      {/* Navigation */}
       {view !== 'home' && view !== 'quiz' && (
         <button className="btn-secondary" onClick={() => setView('home')} style={{ marginBottom: 16 }}>
           ← Atpakaļ
         </button>
       )}
 
-      {/* HOME VIEW */}
+      {/* HOME */}
       {view === 'home' && (
         <>
-          {/* Stats Row */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginBottom: 24 }}>
             <div className="card" style={{ padding: 16, textAlign: 'center' }}>
               <div style={{ fontSize: 24, fontWeight: 800, color: '#f59e0b' }}>{level}</div>
@@ -136,7 +191,6 @@ export default function Home() {
             </div>
           </div>
 
-          {/* Subjects */}
           <h2 style={{ fontSize: 16, fontWeight: 700, marginBottom: 12 }}>Izvēlies priekšmetu</h2>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 24 }}>
             {(Object.entries(SUBJECTS) as [Subject, typeof SUBJECTS[Subject]][]).map(([key, subject]) => (
@@ -161,33 +215,21 @@ export default function Home() {
             ))}
           </div>
 
-          {/* Action Buttons */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 24 }}>
-            <button className="btn-primary" onClick={() => setView('leaderboard')}>
-              🏆 Ranglists
-            </button>
-            <button className="btn-secondary" onClick={() => setView('profile')}>
-              👤 Profils
-            </button>
+            <button className="btn-primary" onClick={() => setView('leaderboard')}>🏆 Ranglists</button>
+            <button className="btn-secondary" onClick={() => setView('profile')}>👤 Profils</button>
           </div>
         </>
       )}
 
-      {/* QUIZ VIEW */}
       {view === 'quiz' && (
-        <Quiz
-          subject={activeSubject}
-          onAnswer={handleAnswer}
-          onBack={() => setView('home')}
-        />
+        <Quiz subject={activeSubject} onAnswer={handleAnswer} onBack={() => setView('home')} />
       )}
 
-      {/* LEADERBOARD VIEW */}
       {view === 'leaderboard' && (
         <Leaderboard myStats={stats} />
       )}
 
-      {/* PROFILE VIEW */}
       {view === 'profile' && (
         <div>
           <h2 style={{ fontSize: 20, fontWeight: 800, marginBottom: 16 }}>👤 Mans profils</h2>
@@ -210,15 +252,11 @@ export default function Home() {
           </div>
 
           <h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 12 }}>🏅 Nozīmītes</h3>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 24 }}>
             {BADGES.map(badge => {
               const earned = stats.badgesEarned.includes(badge.id)
               return (
-                <div key={badge.id} className="card" style={{
-                  opacity: earned ? 1 : 0.4,
-                  padding: 14,
-                  textAlign: 'center'
-                }}>
+                <div key={badge.id} className="card" style={{ opacity: earned ? 1 : 0.4, padding: 14, textAlign: 'center' }}>
                   <div style={{ fontSize: 28 }}>{badge.icon}</div>
                   <div style={{ fontWeight: 700, fontSize: 13, marginTop: 4 }}>{badge.name}</div>
                   <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>{badge.description}</div>
@@ -227,17 +265,8 @@ export default function Home() {
             })}
           </div>
 
-          <button
-            className="btn-secondary"
-            style={{ marginTop: 24 }}
-            onClick={() => {
-              if (confirm('Vai tiešām vēlies dzēst visus datus?')) {
-                localStorage.removeItem('skolenu-stats')
-                setStats(DEFAULT_STATS)
-              }
-            }}
-          >
-            🗑️ Atiestatīt progresu
+          <button className="btn-secondary" onClick={handleLogout}>
+            🚪 Izrakstīties
           </button>
         </div>
       )}
