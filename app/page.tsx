@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import Link from 'next/link'
 import { supabase } from '../lib/supabase'
 import { SUBJECTS, BADGES, QUESTIONS, getLevel, getXPProgress, XP_PER_LEVEL, type UserStats, type Subject } from '../lib/data'
 import Quiz from './components/Quiz'
@@ -215,10 +216,13 @@ export default function Home() {
             ))}
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 24 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
             <button className="btn-primary" onClick={() => setView('leaderboard')}>🏆 Ranglists</button>
             <button className="btn-secondary" onClick={() => setView('profile')}>👤 Profils</button>
           </div>
+          <Link href="/games" className="btn-secondary" style={{ display: 'inline-block', textDecoration: 'none', textAlign: 'center', marginBottom: 24 }}>
+            🎮 Spēles
+          </Link>
         </>
       )}
 
