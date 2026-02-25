@@ -1,28 +1,70 @@
 'use client'
 
-import { useState } from 'react'
+import { useMemo, useState, type KeyboardEvent } from 'react'
 import { supabase } from '../../lib/supabase'
 
 interface Props {
   onSuccess: () => void
 }
 
+type AuthMode = 'login' | 'register'
+
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
 export default function Auth({ onSuccess }: Props) {
-  const [mode, setMode] = useState<'login' | 'register'>('login')
+  const [mode, setMode] = useState<AuthMode>('login')
   const [username, setUsername] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState('')
+  const [touched, setTouched] = useState({ username: false, email: false, password: false })
+
+  const emailError = touched.email && !email
+    ? 'Lūdzu ievadi e-pastu.'
+    : touched.email && !EMAIL_PATTERN.test(email)
+      ? 'Ievadi korektu e-pasta adresi.'
+      : ''
+
+  const usernameError = mode === 'register' && touched.username && username.length < 3
+    ? 'Lietotājvārdam jābūt vismaz 3 simboliem.'
+    : ''
+
+  const passwordError = touched.password && password.length < 6
+    ? 'Parolei jābūt vismaz 6 simboliem.'
+    : ''
+
+  const canSubmit = useMemo(() => {
+    if (loading) return false
+    if (!email || !password) return false
+    if (!EMAIL_PATTERN.test(email)) return false
+    if (password.length < 6) return false
+    if (mode === 'register' && username.length < 3) return false
+    return true
+  }, [email, loading, mode, password, username])
+
+  function resetFeedback(nextMode: AuthMode) {
+    setMode(nextMode)
+    setError('')
+    setMessage('')
+    setTouched({ username: false, email: false, password: false })
+  }
 
   async function handleRegister() {
+    setTouched({ username: true, email: true, password: true })
+
     if (!username || username.length < 3) {
       setError('Lietotājvārdam jābūt vismaz 3 simboli!')
       return
     }
     if (!email || !password) {
       setError('Aizpildi visus laukus!')
+      return
+    }
+    if (!EMAIL_PATTERN.test(email)) {
+      setError('Ievadi korektu e-pasta adresi!')
       return
     }
     if (password.length < 6) {
@@ -44,15 +86,25 @@ export default function Auth({ onSuccess }: Props) {
     if (error) {
       setError(error.message)
     } else {
-      setMessage('✅ Reģistrācija veiksmīga! Pierakstīties var uzreiz.')
       setMode('login')
+      setError('')
+      setTouched({ username: false, email: false, password: false })
+      setPassword('')
+      setMessage('✅ Reģistrācija veiksmīga! Tagad vari pierakstīties.')
     }
     setLoading(false)
   }
 
   async function handleLogin() {
+    setTouched({ username: true, email: true, password: true })
+
     if (!email || !password) {
       setError('Aizpildi visus laukus!')
+      return
+    }
+
+    if (!EMAIL_PATTERN.test(email)) {
+      setError('Ievadi korektu e-pasta adresi!')
       return
     }
 
@@ -69,169 +121,188 @@ export default function Auth({ onSuccess }: Props) {
     setLoading(false)
   }
 
+  function onTabKeyDown(event: KeyboardEvent<HTMLButtonElement>, nextMode: AuthMode) {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault()
+      resetFeedback(nextMode)
+    }
+  }
+
   return (
-    <div style={{ maxWidth: 400, margin: '0 auto', padding: '40px 16px' }}>
-      <div style={{ textAlign: 'center', marginBottom: 32 }}>
-        <div style={{ fontSize: 56, marginBottom: 12 }}>⚔️</div>
-        <h1 style={{ fontSize: 26, fontWeight: 800 }}>Zināšanu Cietoksnis</h1>
-        <p style={{ color: 'var(--text-muted)', marginTop: 8 }}>Mācību platforma vidusskolēniem</p>
-      </div>
+    <main className="auth-shell">
+      <div className="auth-bg-glow" aria-hidden="true" />
+      <section className="auth-layout" aria-label="Autentifikācija">
+        <aside className="auth-hero">
+          <span className="auth-kicker">⚔️ Zināšanu Cietoksnis</span>
+          <h1>Atgriezies mācībās ar skaidru fokusu.</h1>
+          <p>
+            Trenē zināšanas, krāj sasniegumus un seko progresam vienuviet.
+            Ātra reģistrācija, droša piekļuve un motivējoša mācību pieredze.
+          </p>
 
-      {/* Mode Toggle */}
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: '1fr 1fr',
-        gap: 4,
-        background: 'var(--card)',
-        padding: 4,
-        borderRadius: 12,
-        marginBottom: 24
-      }}>
-        <button
-          onClick={() => { setMode('login'); setError(''); setMessage('') }}
-          style={{
-            padding: '10px',
-            borderRadius: 10,
-            border: 'none',
-            cursor: 'pointer',
-            fontWeight: 700,
-            fontSize: 14,
-            background: mode === 'login' ? 'var(--primary)' : 'transparent',
-            color: mode === 'login' ? 'white' : 'var(--text-muted)',
-            transition: 'all 0.2s'
-          }}
-        >
-          Pierakstīties
-        </button>
-        <button
-          onClick={() => { setMode('register'); setError(''); setMessage('') }}
-          style={{
-            padding: '10px',
-            borderRadius: 10,
-            border: 'none',
-            cursor: 'pointer',
-            fontWeight: 700,
-            fontSize: 14,
-            background: mode === 'register' ? 'var(--primary)' : 'transparent',
-            color: mode === 'register' ? 'white' : 'var(--text-muted)',
-            transition: 'all 0.2s'
-          }}
-        >
-          Reģistrēties
-        </button>
-      </div>
-
-      {/* Form */}
-      <div className="card">
-        {message && (
-          <div style={{
-            background: 'rgba(16,185,129,0.1)',
-            border: '1px solid #10b981',
-            borderRadius: 10,
-            padding: '12px 16px',
-            marginBottom: 16,
-            color: '#10b981',
-            fontSize: 14
-          }}>
-            {message}
+          <div className="auth-badges" aria-hidden="true">
+            <span className="badge badge-purple">📈 Progresa līmeņi</span>
+            <span className="badge badge-gold">🏆 Sasniegumu nozīmītes</span>
+            <span className="badge badge-green">🔥 Sērijas un ritms</span>
           </div>
-        )}
 
-        {error && (
-          <div style={{
-            background: 'rgba(239,68,68,0.1)',
-            border: '1px solid #ef4444',
-            borderRadius: 10,
-            padding: '12px 16px',
-            marginBottom: 16,
-            color: '#ef4444',
-            fontSize: 14
-          }}>
-            {error}
+          <ul className="auth-benefits" aria-label="Platformas ieguvumi">
+            <li><strong>Ātri sākts:</strong> konts mazāk nekā minūtē.</li>
+            <li><strong>Droši dati:</strong> tava informācija tiek aizsargāta.</li>
+            <li><strong>Gudrs progress:</strong> redzi izaugsmi katrā priekšmetā.</li>
+          </ul>
+        </aside>
+
+        <div className="auth-card card">
+          <div className="auth-card-header">
+            <h2>{mode === 'login' ? 'Sveiks atpakaļ!' : 'Izveido kontu'}</h2>
+            <p>{mode === 'login' ? 'Turpini no vietas, kur apstājies.' : 'Sāc savu mācību progresa ceļu jau šodien.'}</p>
           </div>
-        )}
 
-        {mode === 'register' && (
-          <div style={{ marginBottom: 16 }}>
-            <label style={{ fontSize: 13, color: 'var(--text-muted)', display: 'block', marginBottom: 6 }}>
-              Lietotājvārds
-            </label>
-            <input
-              type="text"
-              placeholder="piem. Jānis123"
-              value={username}
-              onChange={e => setUsername(e.target.value)}
-              style={{
-                width: '100%',
-                padding: '12px 16px',
-                background: 'rgba(255,255,255,0.05)',
-                border: '1px solid rgba(255,255,255,0.1)',
-                borderRadius: 10,
-                color: 'var(--text)',
-                fontSize: 15,
-                outline: 'none',
-                boxSizing: 'border-box'
-              }}
-            />
+          <div className="auth-tabs" role="tablist" aria-label="Autentifikācijas režīms">
+            <button
+              role="tab"
+              aria-selected={mode === 'login'}
+              aria-controls="auth-form-panel"
+              id="auth-tab-login"
+              tabIndex={mode === 'login' ? 0 : -1}
+              className={`auth-tab ${mode === 'login' ? 'active' : ''}`}
+              onClick={() => resetFeedback('login')}
+              onKeyDown={(event) => onTabKeyDown(event, 'login')}
+              type="button"
+            >
+              Pierakstīties
+            </button>
+            <button
+              role="tab"
+              aria-selected={mode === 'register'}
+              aria-controls="auth-form-panel"
+              id="auth-tab-register"
+              tabIndex={mode === 'register' ? 0 : -1}
+              className={`auth-tab ${mode === 'register' ? 'active' : ''}`}
+              onClick={() => resetFeedback('register')}
+              onKeyDown={(event) => onTabKeyDown(event, 'register')}
+              type="button"
+            >
+              Reģistrēties
+            </button>
           </div>
-        )}
 
-        <div style={{ marginBottom: 16 }}>
-          <label style={{ fontSize: 13, color: 'var(--text-muted)', display: 'block', marginBottom: 6 }}>
-            E-pasts
-          </label>
-          <input
-            type="email"
-            placeholder="epasts@example.com"
-            value={email}
-            onChange={e => setEmail(e.target.value)}
-            style={{
-              width: '100%',
-              padding: '12px 16px',
-              background: 'rgba(255,255,255,0.05)',
-              border: '1px solid rgba(255,255,255,0.1)',
-              borderRadius: 10,
-              color: 'var(--text)',
-              fontSize: 15,
-              outline: 'none',
-              boxSizing: 'border-box'
+          <form
+            id="auth-form-panel"
+            role="tabpanel"
+            aria-labelledby={mode === 'login' ? 'auth-tab-login' : 'auth-tab-register'}
+            className="auth-form"
+            onSubmit={(event) => {
+              event.preventDefault()
+              if (mode === 'login') {
+                handleLogin()
+                return
+              }
+              handleRegister()
             }}
-          />
-        </div>
+            noValidate
+          >
+            {message && (
+              <p className="auth-alert auth-alert-success" role="status" aria-live="polite">{message}</p>
+            )}
 
-        <div style={{ marginBottom: 24 }}>
-          <label style={{ fontSize: 13, color: 'var(--text-muted)', display: 'block', marginBottom: 6 }}>
-            Parole
-          </label>
-          <input
-            type="password"
-            placeholder="Vismaz 6 simboli"
-            value={password}
-            onChange={e => setPassword(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && (mode === 'login' ? handleLogin() : handleRegister())}
-            style={{
-              width: '100%',
-              padding: '12px 16px',
-              background: 'rgba(255,255,255,0.05)',
-              border: '1px solid rgba(255,255,255,0.1)',
-              borderRadius: 10,
-              color: 'var(--text)',
-              fontSize: 15,
-              outline: 'none',
-              boxSizing: 'border-box'
-            }}
-          />
-        </div>
+            {error && (
+              <p className="auth-alert auth-alert-error" role="alert" aria-live="assertive">{error}</p>
+            )}
 
-        <button
-          className="btn-primary"
-          onClick={mode === 'login' ? handleLogin : handleRegister}
-          disabled={loading}
-          style={{ opacity: loading ? 0.7 : 1 }}
-        >
-          {loading ? '⏳ Lūdzu uzgaidi...' : mode === 'login' ? '🚀 Pierakstīties' : '✨ Reģistrēties'}
-        </button>
-      </div>
-    </div>
+            {mode === 'register' && (
+              <div className="auth-field-wrap">
+                <label htmlFor="username">Lietotājvārds</label>
+                <input
+                  id="username"
+                  name="username"
+                  type="text"
+                  autoComplete="username"
+                  placeholder="Piemēram, Jana11"
+                  value={username}
+                  aria-invalid={Boolean(usernameError)}
+                  aria-describedby={usernameError ? 'username-error' : undefined}
+                  onBlur={() => setTouched(prev => ({ ...prev, username: true }))}
+                  onChange={(event) => setUsername(event.target.value)}
+                  className={usernameError ? 'has-error' : ''}
+                />
+                {usernameError && <span id="username-error" className="field-error">{usernameError}</span>}
+              </div>
+            )}
+
+            <div className="auth-field-wrap">
+              <label htmlFor="email">E-pasts</label>
+              <input
+                id="email"
+                name="email"
+                type="email"
+                autoComplete="email"
+                placeholder="epasts@piemers.lv"
+                value={email}
+                aria-invalid={Boolean(emailError)}
+                aria-describedby={emailError ? 'email-error' : undefined}
+                onBlur={() => setTouched(prev => ({ ...prev, email: true }))}
+                onChange={(event) => setEmail(event.target.value)}
+                className={emailError ? 'has-error' : ''}
+              />
+              {emailError && <span id="email-error" className="field-error">{emailError}</span>}
+            </div>
+
+            <div className="auth-field-wrap">
+              <label htmlFor="password">Parole</label>
+              <div className="password-input-wrap">
+                <input
+                  id="password"
+                  name="password"
+                  type={showPassword ? 'text' : 'password'}
+                  autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
+                  placeholder="Ievadi paroli"
+                  value={password}
+                  aria-invalid={Boolean(passwordError)}
+                  aria-describedby={mode === 'register' ? 'password-hint password-error' : passwordError ? 'password-error' : undefined}
+                  onBlur={() => setTouched(prev => ({ ...prev, password: true }))}
+                  onChange={(event) => setPassword(event.target.value)}
+                  className={passwordError ? 'has-error' : ''}
+                />
+                <button
+                  type="button"
+                  className="toggle-password"
+                  onClick={() => setShowPassword(prev => !prev)}
+                  aria-label={showPassword ? 'Paslēpt paroli' : 'Parādīt paroli'}
+                  aria-pressed={showPassword}
+                >
+                  {showPassword ? 'Paslēpt' : 'Rādīt'}
+                </button>
+              </div>
+              {mode === 'register' && (
+                <span id="password-hint" className="field-hint">Vismaz 6 simboli, vēlams ar ciparu drošībai.</span>
+              )}
+              {passwordError && <span id="password-error" className="field-error">{passwordError}</span>}
+            </div>
+
+            {mode === 'login' && (
+              <div className="auth-secondary-row">
+                {/* TODO: pieslēgt, kad būs gatavs paroles atjaunošanas ceļš */}
+                <button type="button" className="link-button" disabled aria-disabled="true" title="Drīzumā pieejams">
+                  Aizmirsi paroli? (drīzumā)
+                </button>
+              </div>
+            )}
+
+            <button
+              className="btn-primary auth-submit"
+              type="submit"
+              disabled={!canSubmit}
+              aria-busy={loading}
+            >
+              {loading ? 'Lūdzu uzgaidi…' : mode === 'login' ? 'Turpināt mācības' : 'Izveidot kontu'}
+            </button>
+
+            <p className="auth-footnote">Tavs konts un mācību progress tiek glabāts droši.</p>
+          </form>
+        </div>
+      </section>
+    </main>
   )
 }
