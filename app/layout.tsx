@@ -5,8 +5,11 @@ import './globals.css'
 const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: 'Zināšanu Cietoksnis',
-  description: 'Mācību platforma vidusskolēniem',
+  title: 'DVĢ Intranets',
+  description: 'Dobeles Valsts ģimnāzijas intranets skolēniem un darbiniekiem',
+  icons: {
+    icon: [{ url: '/favicon.svg', type: 'image/svg+xml' }],
+  },
 }
 
 export default function RootLayout({

@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { useMemo, useState, type KeyboardEvent } from 'react'
 import { supabase } from '../../lib/supabase'
 
@@ -12,6 +13,7 @@ type AuthMode = 'login' | 'register'
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 export default function Auth({ onSuccess }: Props) {
+  const currentYear = new Date().getFullYear()
   const [mode, setMode] = useState<AuthMode>('login')
   const [username, setUsername] = useState('')
   const [email, setEmail] = useState('')
@@ -90,7 +92,7 @@ export default function Auth({ onSuccess }: Props) {
       setError('')
       setTouched({ username: false, email: false, password: false })
       setPassword('')
-      setMessage('✅ Reģistrācija veiksmīga! Tagad vari pierakstīties.')
+      setMessage('✅ Reģistrācija veiksmīga! Tagad vari pieslēgties.')
     }
     setLoading(false)
   }
@@ -133,30 +135,40 @@ export default function Auth({ onSuccess }: Props) {
       <div className="auth-bg-glow" aria-hidden="true" />
       <section className="auth-layout" aria-label="Autentifikācija">
         <aside className="auth-hero">
-          <span className="auth-kicker">⚔️ Zināšanu Cietoksnis</span>
-          <h1>Atgriezies mācībās ar skaidru fokusu.</h1>
+          <Link
+            href="/"
+            className="auth-brand-link"
+            aria-label="Doties uz sākumlapu"
+          >
+            <span className="auth-brand-title">DVĢ Intranets</span>
+            <span className="auth-brand-subtitle">DVĢ Hub</span>
+          </Link>
+          <span className="auth-kicker">Dobeles Valsts ģimnāzija</span>
+          <h1>DVĢ Intranets — viss svarīgais vienuviet</h1>
           <p>
-            Trenē zināšanas, krāj sasniegumus un seko progresam vienuviet.
-            Ātra reģistrācija, droša piekļuve un motivējoša mācību pieredze.
+            Piekļūsti skolas aktualitātēm, mācību materiāliem, dokumentiem un
+            iekšējai informācijai droši un ērti.
           </p>
 
           <div className="auth-badges" aria-hidden="true">
-            <span className="badge badge-purple">📈 Progresa līmeņi</span>
-            <span className="badge badge-gold">🏆 Sasniegumu nozīmītes</span>
-            <span className="badge badge-green">🔥 Sērijas un ritms</span>
+            <span className="badge badge-purple">📣 Aktualitātes un paziņojumi</span>
+            <span className="badge badge-gold">📚 Mācību materiāli</span>
+            <span className="badge badge-green">📁 Dokumenti un resursi</span>
+            <span className="badge badge-cyan">🔒 Droša piekļuve</span>
           </div>
 
           <ul className="auth-benefits" aria-label="Platformas ieguvumi">
-            <li><strong>Ātri sākts:</strong> konts mazāk nekā minūtē.</li>
-            <li><strong>Droši dati:</strong> tava informācija tiek aizsargāta.</li>
-            <li><strong>Gudrs progress:</strong> redzi izaugsmi katrā priekšmetā.</li>
+            <li><strong>Ātra piekļuve:</strong> svarīgākais vienuviet.</li>
+            <li><strong>Drošība:</strong> dati tiek glabāti un apstrādāti atbildīgi.</li>
+            <li><strong>Pārskatāmība:</strong> ērta pieeja informācijai skolēniem un darbiniekiem.</li>
+            <li><strong>Saziņa:</strong> vienkārša piekļuve iekšējai komunikācijai.</li>
           </ul>
         </aside>
 
         <div className="auth-card card">
           <div className="auth-card-header">
-            <h2>{mode === 'login' ? 'Sveiks atpakaļ!' : 'Izveido kontu'}</h2>
-            <p>{mode === 'login' ? 'Turpini no vietas, kur apstājies.' : 'Sāc savu mācību progresa ceļu jau šodien.'}</p>
+            <h2>{mode === 'login' ? 'Sveicināts atpakaļ!' : 'Izveido kontu'}</h2>
+            <p>{mode === 'login' ? 'Pieslēdzies, lai turpinātu darbu DVĢ Intranetā.' : 'Reģistrējies, lai piekļūtu DVĢ Intraneta videi.'}</p>
           </div>
 
           <div className="auth-tabs" role="tablist" aria-label="Autentifikācijas režīms">
@@ -171,7 +183,7 @@ export default function Auth({ onSuccess }: Props) {
               onKeyDown={(event) => onTabKeyDown(event, 'login')}
               type="button"
             >
-              Pierakstīties
+              Pieslēgties
             </button>
             <button
               role="tab"
@@ -285,7 +297,7 @@ export default function Auth({ onSuccess }: Props) {
               <div className="auth-secondary-row">
                 {/* TODO: pieslēgt, kad būs gatavs paroles atjaunošanas ceļš */}
                 <button type="button" className="link-button" disabled aria-disabled="true" title="Drīzumā pieejams">
-                  Aizmirsi paroli? (drīzumā)
+                  Aizmirsi paroli? (drīzumā pieejams)
                 </button>
               </div>
             )}
@@ -296,13 +308,17 @@ export default function Auth({ onSuccess }: Props) {
               disabled={!canSubmit}
               aria-busy={loading}
             >
-              {loading ? 'Lūdzu uzgaidi…' : mode === 'login' ? 'Turpināt mācības' : 'Izveidot kontu'}
+              {loading ? 'Lūdzu, uzgaidi…' : mode === 'login' ? 'Turpināt' : 'Izveidot kontu'}
             </button>
 
-            <p className="auth-footnote">Tavs konts un mācību progress tiek glabāts droši.</p>
+            <p className="auth-footnote">Tavi dati un aktivitāšu informācija tiek glabāti droši.</p>
           </form>
         </div>
       </section>
+      <footer className="auth-footer" role="contentinfo">
+        <p>© {currentYear} Dobeles Valsts ģimnāzija. Visas tiesības aizsargātas.</p>
+        <p className="auth-footer-meta">DVĢ Intranets v1.0</p>
+      </footer>
     </main>
   )
 }
